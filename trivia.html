@@ -4,12 +4,28 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Trivia</title>
+
+  <!-- Preload de fuentes (mismo origen) -->
+  <link rel="preload" as="font" href="assets/fonts/Flexo-Regular.ttf" type="font/ttf">
+  <link rel="preload" as="font" href="assets/fonts/Flexo-Bold.ttf" type="font/ttf">
+  <link rel="preload" as="font" href="assets/fonts/Flexo-Black.ttf" type="font/ttf">
+
   <style>
-    /* Fuente específica para el texto de las preguntas (ajusta la ruta) */
+    /* === FUENTES FLEXO (desde assets/fonts) === */
     @font-face{
-      font-family:"PreguntasQore";
-      src:url("fonts/preguntas.woff2") format("woff2");
-      font-display:swap;
+      font-family: "Flexo";
+      src: url("assets/fonts/Flexo-Regular.ttf") format("truetype");
+      font-weight: 400; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "Flexo";
+      src: url("assets/fonts/Flexo-Bold.ttf") format("truetype");
+      font-weight: 700; font-style: normal; font-display: swap;
+    }
+    @font-face{
+      font-family: "Flexo";
+      src: url("assets/fonts/Flexo-Regular.ttf") format("truetype");
+      font-weight: 900; font-style: normal; font-display: swap;
     }
 
     :root{
@@ -19,20 +35,21 @@
       --choice-gap: 34px; /* separación entre alternativas */
       --enter-dur: .8s;   /* duración animación de entrada */
       --enter-stagger: 400ms; /* diferencia entre A, B, C */
-      --fb-ms: 2000;      /* tiempo de feedback (ms) */
+      --fb-ms: 5000;      /* tiempo de feedback (ms) */
       --fb-in: 420ms;     /* duración del fade/zoom del overlay */
       --post-answer-delay: 1000ms; /* retardo DESPUÉS de responder antes del feedback */
       --end-ms: 5000;     /* duración del overlay final antes de redirigir */
     }
 
-    *{box-sizing:border-box}
-    html,body{height:100%}
+    *{ box-sizing:border-box }
+    html,body{ height:100% }
     body{
       margin:0; height:100vh; width:100vw; overflow:hidden;
       display:flex; align-items:center; justify-content:center; /* todo centrado */
       background: url("images/fondopregunta.png") no-repeat center center/cover; /* mismo fondo */
       color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.35);
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+      font-family:"Flexo", system-ui, -apple-system, Segoe UI, Roboto, Inter, Arial, sans-serif;
+      font-weight:400;
     }
 
     /* Contenedor principal en GRID con áreas: decor → question → choices */
@@ -57,19 +74,25 @@
 
     .meta{ font-size:14px; opacity:.0; margin-bottom:0; grid-column: 1/-1; }
 
-    /* Decoración superior (siempre centrada y estática) */
+    /* Decoración superior (siempre presente y centrada) */
     .decor-wrap{ grid-area: decor; height: var(--decor-h); width:100%; display:flex; align-items:center; justify-content:center; }
     .decor{ max-height:100%; width:auto; object-fit:contain; display:block; margin-top: -400px }
 
     /* Pregunta (bloque con altura fija para evitar movimiento) */
     .q-wrap{ grid-area: question; height: var(--q-h); width:100%; display:flex; align-items:center; justify-content:center; margin-top: -200px; }
-    .q{ font-family:"PreguntasQore", Inter, system-ui, sans-serif; font-size:60px; line-height:1.15; margin:0; padding:0 8px; text-wrap:balance; }
+    .q{
+      font-family:"Flexo", Inter, system-ui, sans-serif;
+      font-weight:900;                 /* Flexo-Black */
+      font-size:60px; line-height:1.15; margin:0; padding:0 8px; text-wrap:balance;
+    }
 
     /* Alternativas: contenedor centrado, contenido interno a la IZQUIERDA */
     .choices{ grid-area: choices; width:min(740px, 92vw); display:flex; flex-direction:column; gap:var(--choice-gap); align-items:stretch; }
     .choice{
       appearance:none; background:transparent; border:none; /* sin fondo, sin borde */
-      color:#fff; padding:10px 12px; border-radius:16px; font-weight:700; font-size:40px;
+      color:#fff; padding:10px 12px; border-radius:16px; font-size:40px;
+      font-family:"Flexo", Inter, system-ui, sans-serif;
+      font-weight:700;                 /* Flexo-Bold */
       cursor:pointer; user-select:none; width:100%; /* ocupa ancho del contenedor centrado */
       display:inline-flex; align-items:center; justify-content:flex-start; gap:52px; /* icono + texto a la izquierda */
       text-align:left; /* alineación a la izquierda dentro del botón */
@@ -111,9 +134,9 @@
     .feedback.bad {  background-image: url('images/Incorrecto.png'); }
 
     .feedback .msg{
-      max-width:min(840px, 92vw); font-size:40px; line-height:1.25; text-align:center;
-      font-weight:800; text-shadow: 0 2px 6px rgba(0,0,0,.45);
-      font-family:"PreguntasQore", Inter, system-ui, sans-serif;
+      max-width:min(840px, 92vw); font-size:50px; line-height:1.25; text-align:center;
+      font-weight:900; text-shadow: 0 2px 6px rgba(0,0,0,.45);
+      font-family:"Flexo", Inter, system-ui, sans-serif; top: 100px;
       opacity:0; transform: translateY(8px);
       transition: opacity var(--fb-in, 420ms) ease .08s, transform var(--fb-in, 420ms) ease .08s;
     }
@@ -132,7 +155,7 @@
     .end-overlay .msg{
       max-width:min(900px,92vw); text-align:center; font-size:48px; line-height:1.2;
       font-weight:900; text-shadow:0 2px 6px rgba(0,0,0,.45);
-      font-family:"PreguntasQore", Inter, system-ui, sans-serif;
+      font-family:"Flexo", Inter, system-ui, sans-serif;
       opacity:0; transform: translateY(8px);
       transition: opacity var(--fb-in,420ms) ease .08s, transform var(--fb-in,420ms) ease .08s; 
     }
@@ -413,8 +436,7 @@
 
     function showEnd(){
       const win = score >= WIN_THRESHOLD;
-      endMsg.textContent = win ? ''
-                               : '';
+      endMsg.textContent = win ? '' : '';
       endOverlay.classList.remove('win','lose');
       endOverlay.classList.add(win ? 'win' : 'lose', 'on');
       screen.classList.add('is-hidden');
