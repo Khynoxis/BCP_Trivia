@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Rompecabezas - Inicio</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      width: 100vw;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: url("images/Fondo1.png") no-repeat center center/cover;
+      overflow: hidden;
+    }
+    .container { position: relative; width: 100%; height: 100%; }
+
+    .clickable {
+      position: absolute;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-touch-callout: none;
+    }
+    .clickable:focus { outline: none; }
+    .clickable:hover { transform: scale(1.05); }
+
+    /* Animación de giro (sin uso en este HTML, pero la dejo) */
+    .spin { animation: spin 8s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+    /* Fondo aleatorio siempre detrás (sin uso aquí) */
+    .bg-random { z-index: 0; opacity: 1; transition: top 1s ease, left 1s ease, opacity 1s ease; }
+
+    /* CAPAS: botón más arriba que logos */
+    #startBtn { z-index: 999; animation: pulse 1.5s ease-in-out infinite, glow 2s ease-in-out infinite; }
+    .logo { z-index: 10; pointer-events: none; } /* <- no intercepta el click */
+
+    /* Animación de latido para logo1 */
+    @keyframes heartbeat {
+      0%,100% { transform: translate(-50%, -50%) scale(1); }
+      25% { transform: translate(-50%, -50%) scale(1.1); }
+      50% { transform: translate(-50%, -50%) scale(0.95); }
+      75% { transform: translate(-50%, -50%) scale(1.05); }
+    }
+    .logo1 { animation: heartbeat 1.5s ease-in-out infinite; }
+
+    /* Entrada para logo2 */
+    @keyframes fadeInUp {
+      0% { opacity: 0; transform: translate(-50%, -40%) scale(0.9); }
+      100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    }
+    .logo2 { animation: fadeInUp 1.2s ease-out; }
+
+    /* Botón empezar (pulso + brillo) */
+    @keyframes pulse {
+      0%,100% { transform: translate(-50%, -50%) scale(1); }
+      50% { transform: translate(-50%, -50%) scale(1.1); }
+    }
+    @keyframes glow {
+      0%,100% { filter: drop-shadow(0 0 5px #ffffff) drop-shadow(0 0 10px #ffffff); }
+      50% { filter: drop-shadow(0 0 20px #fff) drop-shadow(0 0 40px #fff); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Botón iniciar con animación (arriba de todo) -->
+    <img
+      src="images/jugar.png"
+      class="clickable"
+      id="startBtn"
+      style="top:55%; left:50%; transform:translate(-50%,-50%);"
+      width="900"
+      alt="Empezar"
+      role="button"
+      tabindex="0"
+    >
+
+    <!-- Logo 1 con latido -->
+    <img
+      src="images/Logo Principal.png"
+      class="clickable logo logo1"
+      style="top:50%; left:50%; transform:translate(-50%,-50%);"
+      width="900"
+      alt="Logo principal"
+    >
+
+    <!-- Logo 2 con animación de entrada -->
+    <img
+      src="images/text.png"
+      class="clickable logo logo2"
+      style="top:50%; left:50%; transform:translate(-50%,-50%);"
+      width="1000"
+      alt="Texto del juego"
+    >
+  </div>
+
+  <script>
+    // Click y teclado para botón iniciar
+    const start = document.getElementById('startBtn');
+    const go = () => { window.location.href = 'preview.html'; }; // tu ruta real
+
+    // Asegura que el listener se adjunta
+    if (start) {
+      start.addEventListener('click', go);
+      start.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); }
+      });
+      // Mejora iOS: también responde al toque explícito
+      start.addEventListener('touchend', (e) => { e.preventDefault(); go(); }, { passive: false });
+    }
+  </script>
+</body>
+</html>

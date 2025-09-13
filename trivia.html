@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trivia</title>
+  <style>
+    /* Fuente específica para el texto de las preguntas (ajusta la ruta) */
+    @font-face{
+      font-family:"PreguntasQore";
+      src:url("fonts/preguntas.woff2") format("woff2");
+      font-display:swap;
+    }
+
+    :root{
+      --maxw: 900px;      /* ancho máximo del contenido */
+      --decor-h: 90px;    /* altura reservada para la decoración superior */
+      --q-h: 180px;       /* altura reservada para el bloque de pregunta */
+      --choice-gap: 34px; /* separación entre alternativas */
+      --enter-dur: .8s;   /* duración animación de entrada */
+      --enter-stagger: 400ms; /* diferencia entre A, B, C */
+      --fb-ms: 2000;      /* tiempo de feedback (ms) */
+      --fb-in: 420ms;     /* duración del fade/zoom del overlay */
+      --post-answer-delay: 1000ms; /* retardo DESPUÉS de responder antes del feedback */
+      --end-ms: 5000;     /* duración del overlay final antes de redirigir */
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0; height:100vh; width:100vw; overflow:hidden;
+      display:flex; align-items:center; justify-content:center; /* todo centrado */
+      background: url("images/fondopregunta.png") no-repeat center center/cover; /* mismo fondo */
+      color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.35);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif;
+    }
+
+    /* Contenedor principal en GRID con áreas: decor → question → choices */
+    main{
+      width:min(var(--maxw), 94vw);
+      padding:12px;
+      display:grid;
+      grid-template-rows: var(--decor-h) var(--q-h) auto; /* alturas fijas arriba */
+      grid-template-areas:
+        "decor"
+        "question"
+        "choices";
+      align-items:center;   /* centra vertical cada celda */
+      justify-items:center; /* centra horizontal cada celda */
+      gap: 12px;
+      text-align:center; /* centra solo textos generales; las opciones controlan su propio alineado */
+      position:relative;
+      z-index: 0;
+    }
+    /* Ocultar completamente el contenido durante overlay */
+    main.is-hidden{ opacity:0; visibility:hidden; }
+
+    .meta{ font-size:14px; opacity:.0; margin-bottom:0; grid-column: 1/-1; }
+
+    /* Decoración superior (siempre centrada y estática) */
+    .decor-wrap{ grid-area: decor; height: var(--decor-h); width:100%; display:flex; align-items:center; justify-content:center; }
+    .decor{ max-height:100%; width:auto; object-fit:contain; display:block; margin-top: -400px }
+
+    /* Pregunta (bloque con altura fija para evitar movimiento) */
+    .q-wrap{ grid-area: question; height: var(--q-h); width:100%; display:flex; align-items:center; justify-content:center; margin-top: -200px; }
+    .q{ font-family:"PreguntasQore", Inter, system-ui, sans-serif; font-size:60px; line-height:1.15; margin:0; padding:0 8px; text-wrap:balance; }
+
+    /* Alternativas: contenedor centrado, contenido interno a la IZQUIERDA */
+    .choices{ grid-area: choices; width:min(740px, 92vw); display:flex; flex-direction:column; gap:var(--choice-gap); align-items:stretch; }
+    .choice{
+      appearance:none; background:transparent; border:none; /* sin fondo, sin borde */
+      color:#fff; padding:10px 12px; border-radius:16px; font-weight:700; font-size:40px;
+      cursor:pointer; user-select:none; width:100%; /* ocupa ancho del contenedor centrado */
+      display:inline-flex; align-items:center; justify-content:flex-start; gap:52px; /* icono + texto a la izquierda */
+      text-align:left; /* alineación a la izquierda dentro del botón */
+
+      /* estado inicial para animación de entrada */
+      opacity:0; transform: translateY(16px);
+    }
+    .choice:disabled{ opacity:.9; cursor:default }
+
+    /* Viñeta/imagen al comienzo de cada alternativa */
+    .choice .icon{ width:60px; height:60px; object-fit:contain; flex:0 0 auto; filter: drop-shadow(0 1px 1px rgba(0,0,0,.35)); }
+
+    /* Texto de la alternativa alineado a la IZQUIERDA */
+    .choice .label{ flex:1 1 auto; display:inline-block; text-align:left; }
+
+    /* Estados de corrección SIN fondo (solo contorno) */
+    .choice.correct{ outline:3px solid rgba(34,197,94,.95); outline-offset:4px; }
+    .choice.wrong  { outline:3px solid rgba(239,68,68,.95); outline-offset:4px; }
+
+    /* Animación de entrada (solo para opciones) */
+    @keyframes enterChoice{
+      from{ opacity:0; transform: translateY(16px); }
+      to  { opacity:1; transform: translateY(0); }
+    }
+    .choice.show{ animation: enterChoice var(--enter-dur) ease-out forwards; animation-delay: var(--d, 0ms); }
+
+    /* OVERLAY de feedback (fondo + mensaje) */
+    .feedback{
+      position: fixed; inset: 0; display:grid; place-items:center; z-index: 999;
+      background-repeat:no-repeat; background-position:center; background-size:cover;
+      padding: 24px;
+      opacity:0; visibility:hidden; pointer-events:none; transform: scale(1.02);
+      transition: opacity var(--fb-in, 420ms) ease, transform var(--fb-in, 420ms) ease;
+    }
+    .feedback.on{ opacity:1; visibility:visible; pointer-events:auto; transform: scale(1); }
+
+    /* Nombres por defecto (puedes cambiarlos si prefieres) */
+    .feedback.ok  {  background-image: url('images/Correcto.png'); }
+    .feedback.bad {  background-image: url('images/Incorrecto.png'); }
+
+    .feedback .msg{
+      max-width:min(840px, 92vw); font-size:40px; line-height:1.25; text-align:center;
+      font-weight:800; text-shadow: 0 2px 6px rgba(0,0,0,.45);
+      font-family:"PreguntasQore", Inter, system-ui, sans-serif;
+      opacity:0; transform: translateY(8px);
+      transition: opacity var(--fb-in, 420ms) ease .08s, transform var(--fb-in, 420ms) ease .08s;
+    }
+    .feedback.on .msg{ opacity:1; transform:none; }
+
+    /* OVERLAY FINAL (victoria/derrota) */
+    .end-overlay{
+      position: fixed; inset:0; display:grid; place-items:center; z-index: 1000;
+      background-repeat:no-repeat; background-position:center; background-size:cover;
+      padding:24px; opacity:0; visibility:hidden; pointer-events:none; transform: scale(1.02);
+      transition: opacity var(--fb-in, 420ms) ease, transform var(--fb-in, 420ms) ease;
+    }
+    .end-overlay.on{ opacity:1; visibility:visible; pointer-events:auto; transform: scale(1); }
+    .end-overlay.win{  background-image: url('images/Fondowin.png'); }
+    .end-overlay.lose{ background-image: url('images/Fondolose.png'); }
+    .end-overlay .msg{
+      max-width:min(900px,92vw); text-align:center; font-size:48px; line-height:1.2;
+      font-weight:900; text-shadow:0 2px 6px rgba(0,0,0,.45);
+      font-family:"PreguntasQore", Inter, system-ui, sans-serif;
+      opacity:0; transform: translateY(8px);
+      transition: opacity var(--fb-in,420ms) ease .08s, transform var(--fb-in,420ms) ease .08s; 
+    }
+    .end-overlay.on .msg{ opacity:1; transform:none; }
+  </style>
+
+  <!-- Preload de fondos del overlay para que aparezcan sin retraso -->
+  <link rel="preload" as="image" href="images/Correcto.png">
+  <link rel="preload" as="image" href="images/Incorrecto.png">
+  <link rel="preload" as="image" href="images/Fondowin.png">
+  <link rel="preload" as="image" href="images/Fondolose.png">
+  <!-- Fallbacks (por si cambian nombres a minúsculas o prefijo 'fondo-') -->
+  <link rel="preload" as="image" href="images/correcto.png">
+  <link rel="preload" as="image" href="images/incorrecto.png">
+  <link rel="preload" as="image" href="images/fondo-correcto.png">
+  <link rel="preload" as="image" href="images/fondo-incorrecto.png">
+</head>
+<body>
+  <main>
+    <div class="meta">Pregunta <span id="i">1</span>/<span id="t">5</span></div>
+
+    <!-- Decoración superior (siempre presente y centrada) -->
+    <div class="decor-wrap">
+      <img class="decor" src="images/star2.png" alt="" aria-hidden="true" />
+    </div>
+
+    <!-- Pregunta (altura fija para evitar saltos) -->
+    <div class="q-wrap">
+      <h1 class="q" id="q">…</h1>
+    </div>
+
+    <!-- Alternativas -->
+    <div class="choices" id="choices"></div>
+
+    <div id="final" style="display:none">
+      <div>Tu puntaje: <strong id="score">0</strong>/<span id="tt">5</span></div>
+      <button id="retry">Jugar de nuevo</button>
+    </div>
+  </main>
+
+  <!-- Overlay de feedback (cambia fondo y muestra explicación X segundos) -->
+  <div id="feedback" class="feedback" aria-live="polite" aria-atomic="true">
+    <div id="feedbackMsg" class="msg"></div>
+    <audio id="sOk" src="sounds/win.mp3" preload="auto"></audio>
+    <audio id="sBad" src="sounds/lose.mp3" preload="auto"></audio>
+  </div>
+
+  <!-- Overlay final de victoria/derrota -->
+  <div id="end" class="end-overlay" aria-live="polite" aria-atomic="true">
+    <div id="endMsg" class="msg"></div>
+  </div>
+
+  <script>
+  (function(){
+    'use strict';
+
+    // 10 preguntas (3 alternativas). Mostramos 5 aleatorias por juego
+    const QUESTIONS = [
+      { q:'¿Qué es Qore del BCP?',
+        opts:['Un tipo de préstamo especial','El nuevo programa de beneficios del BCP','Una nueva tarjeta de débito'],
+        correct:1,
+        ok:'¡Eso es! Qore es el nuevo programa de beneficios del BCP, que te abre las puertas de los mejores descuentos y experiencias.',
+        bad:'Ups… Qore no es un préstamo ni una tarjeta de débito. Es un programa de beneficios para tu día a día.' },
+      { q:'¿Cómo se acumulan los Puntos Qore?',
+        opts:['Cada vez que yapeas','Tarjeta de Crédito Visa BCP Qore','Solo cuando compras en supermercados'],
+        correct:1,
+        ok:'¡Bien! Cada consumo con tu tarjeta Qore suma puntos. Más compras, más beneficios para disfrutar.',
+        bad:'Ni yapeando ni solo comprando en supermercados… la forma oficial es 1 dólar = 1 punto Qore.' },
+      { q:'Además de poder canjear en restaurantes, ¿qué otros rubros tienen beneficios con Qore?',
+        opts:['Moda, joyería y entretenimiento','Solo supermercados','Únicamente grifos'],
+        correct:0,
+        ok:'¡Muy bien! Qore también abre puertas en moda, joyería y entretenimiento. Es como tener menú variado.',
+        bad:'No solo supermercados ni grifos. Qore es más amplio: moda, joyería y entretenimiento.' },
+      { q:'¿Qué producto te da acceso automático a Qore, además de las tarjetas de crédito Visa BCP Qore?',
+        opts:['Un préstamo hipotecario','Una Cuenta Sueldo BCP','Una billetera digital'],
+        correct:1,
+        ok:'¡Correcto! Con tu Cuenta Sueldo BCP ya eres parte de Qore. Automático como pedir combo en un fast food.',
+        bad:'Nada de hipotecas ni billeteras. La llave directa a Qore es la Cuenta Sueldo o pidiendo una Tarjeta de Crédito Qore del BCP.' },
+      { q:'¿Cuántos niveles tiene Qore?',
+        opts:['3 niveles','5 niveles','10 niveles'],
+        correct:1,
+        ok:'¡Eso es! Qore tiene 5 niveles. Como una degustación que va subiendo en intensidad.',
+        bad:'No son 3 ni 10. El número perfecto es 5 niveles de beneficios.' },
+      { q:'¿Qué beneficio obtienes al subir de nivel en Qore?',
+        opts:['Tasas de interés más bajas en préstamos','Puntos adicionales al acumular','Más retiros en cajeros automáticos'],
+        correct:1,
+        ok:'¡Exacto! Al subir de nivel acumulas más puntos. Es como servirte porción extra sin pagar.',
+        bad:'Nada de cajeros ni préstamos. El premio por subir nivel es ganar más puntos Qore.' },
+      { q:'¿Dónde puedes ver tus Puntos Qore acumulados?',
+        opts:['Solo en la web del BCP','En la Banca Móvil BCP, en la Zona Qore','En los estados de cuenta impresos'],
+        correct:1,
+        ok:'¡Bien jugado! En la Banca Móvil, en la Zona Qore, ves tus puntos como quien chequea la carta de un restaurante.',
+        bad:'No solo web ni papeles. Tus puntos viven en la app, en la Zona Qore.' },
+      { q:'¿Cuál es uno de los multiplicadores de puntos que ofrece Qore en categorías especiales?',
+        opts:['x10 en todas las compras','x3 en supermercados y restaurantes','x5 en compras de tecnología'],
+        correct:1,
+        ok:'¡Exacto! Hasta x3 en supermercados y restaurantes. Triple sabor, triple puntos.',
+        bad:'No hay x10 ni x5 en tecnología. El plus real es x3 en súper y restaurantes.' },
+      { q:'¿Con qué modalidad puedes pagar en comercios usando Puntos Qore?',
+        opts:['Solo canje total (100% en puntos)','Canje parcial o total (puntos + tarjeta)','Canje en efectivo en ventanilla'],
+        correct:1,
+        ok:'¡Correcto! Canje total o parcial: puntos + tarjeta. Como pagar la cuenta entre amigos.',
+        bad:'Nada de efectivo ni solo 100%. Se puede canjear parcial o total con tus puntos Qore.' },
+      { q:'¿Qué diferencia a Qore frente a programas de millas?',
+        opts:['Que se enfoca en beneficios del día a día','Que solo sirve para volar en avión','Que se activa únicamente en viajes'],
+        correct:0,
+        ok:'¡Eso es! Qore se enfoca en beneficios diarios, no solo viajes. Como tener delivery de descuentos a la mano.',
+        bad:'No es exclusivo de vuelos ni viajes. Qore es para tu día a día, en cada compra.' }
+    ];
+
+    // Viñetas (cámbialas por tus imágenes reales)
+    const ICONS = ['images/1.png','images/2.png','images/3.png'];
+
+    const TOTAL = 5; // fijo: 5 preguntas por juego
+
+    // Tiempos desde CSS variables (ms o s)
+    const FEEDBACK_MS    = parseTimeVar('--fb-ms', 5000);
+    const POST_DELAY_MS  = parseTimeVar('--post-answer-delay', 2000);
+    const FB_FADE_MS     = parseTimeVar('--fb-in', 420);
+    const END_MS         = parseTimeVar('--end-ms', 5000);
+    const WIN_THRESHOLD  = 3;
+    const REDIRECT_TO    = 'index.html';
+
+    // Estado
+    let deck = pickRandom(QUESTIONS, TOTAL);
+    let i = 0; // índice actual 0..TOTAL-1
+    let score = 0; // aciertos
+
+    // DOM
+    const qEl = document.getElementById('q');
+    const choices = document.getElementById('choices');
+    const idxEl = document.getElementById('i');
+    const totEl = document.getElementById('t'); totEl.textContent = TOTAL;
+    const final = document.getElementById('final');
+    const scoreEl = document.getElementById('score');
+    const ttEl = document.getElementById('tt'); ttEl.textContent = TOTAL;
+    const retry = document.getElementById('retry');
+    const fb = document.getElementById('feedback');
+    const fbMsg = document.getElementById('feedbackMsg');
+    const sOk = document.getElementById('sOk');
+    const sBad = document.getElementById('sBad');
+    const screen = document.querySelector('main');
+    const endOverlay = document.getElementById('end');
+    const endMsg = document.getElementById('endMsg');
+
+    // Fallbacks de imágenes por si cambian nombres (se aplican en línea)
+    const BG_OKS  = ['images/Correcto.png','images/fondo-correcto.png','images/correcto.png'];
+    const BG_BADS = ['images/Incorrecto.png','images/fondo-incorrecto.png','images/incorrecto.png'];
+
+    // Preload adicional por JS (por si el navegador ignora <link rel=preload>)
+    [...BG_OKS, ...BG_BADS, 'images/Fondowin.png','images/Fondolose.png']
+      .forEach(src=>{ const im=new Image(); im.src=src; });
+
+    // Primer toque para desbloquear audio en móviles con el primer toque
+    document.addEventListener('pointerdown', primeAudio, { once: true });
+
+    retry?.addEventListener('click', ()=>{
+      deck = pickRandom(QUESTIONS, TOTAL);
+      i = 0; score = 0; final.style.display = 'none'; render();
+    });
+
+    // Desbloqueo de audio en móviles (iOS/Android)
+    function primeAudio(){
+      try{
+        [sOk, sBad].forEach(a=>{
+          if(!a) return;
+          a.muted = true;
+          const p = a.play();
+          if(p && p.then){
+            p.then(()=>{ a.pause(); a.currentTime = 0; a.muted = false; })
+             .catch(()=>{ a.muted = false; });
+          } else {
+            a.pause(); a.currentTime = 0; a.muted = false;
+          }
+        });
+      }catch(_e){}
+    }
+
+    function playSound(a){
+      if(!a) return;
+      try{ a.currentTime = 0; a.play().catch(()=>{}); }catch(_e){}
+    }
+
+    // Helper para disparar SIEMPRE la animación de entrada visible
+    function runEntrance(){
+      const nodes = Array.from(choices.children);
+      nodes.forEach((b, idx)=>{
+        b.classList.remove('show');     // reset
+        void b.offsetWidth;             // reflow para reiniciar anim
+        b.style.setProperty('--d', `calc(${idx} * var(--enter-stagger))`);
+        requestAnimationFrame(()=> b.classList.add('show'));
+      });
+    }
+
+    render();
+
+    function render(){
+      // Fin del mazo: no renderizamos más preguntas aquí; showEnd se llama tras último feedback
+      if(i >= deck.length){ return; }
+
+      document.querySelector('.meta').style.display = '';
+      qEl.textContent = deck[i].q; // solo cambiamos texto; el bloque no cambia tamaño por CSS
+      choices.style.display = 'flex';
+
+      const item = deck[i];
+      idxEl.textContent = String(i+1);
+
+      // alternativas en columna, contenedor centrado, contenido interno a la izquierda
+      choices.innerHTML = '';
+      const icons = item.icons || ICONS; // permite íconos por pregunta si quieres
+      item.opts.forEach((text, idx)=>{
+        const b = document.createElement('button');
+        b.className = 'choice';
+        b.type = 'button';
+        const iconSrc = icons[idx] || icons[0] || '';
+        b.innerHTML = `${iconSrc ? `<img class="icon" src="${iconSrc}" alt="" aria-hidden="true">` : ''}<span class="label">${escapeHtml(text)}</span>`;
+        b.addEventListener('click', ()=>select(idx, item, b));
+        choices.appendChild(b);
+      });
+
+      // Si no hay overlay activo, animamos ahora; si hay, animaremos al ocultarlo
+      if(!fb.classList.contains('on') && !screen.classList.contains('is-hidden')){
+        runEntrance();
+      }
+    }
+
+    function select(selIdx, item, btn){
+      // desactivar
+      const nodes = Array.from(choices.children);
+      nodes.forEach(n=> n.disabled = true);
+
+      // marcar correcta/incorrecta (sin fondo, solo contorno)
+      nodes[item.correct].classList.add('correct');
+      if(selIdx !== item.correct){ btn.classList.add('wrong'); }
+      else { score++; }
+
+      // Mostrar overlay de feedback con BG diferente + texto durante FEEDBACK_MS
+      const isOk = selIdx === item.correct;
+      setTimeout(()=>{ showFeedback(isOk ? item.ok : item.bad, isOk); }, POST_DELAY_MS);
+    }
+
+    function showFeedback(message, isOk){
+      // Forzar fondo con lista de fallbacks (primero que cargue se usa)
+      const imgs = (isOk ? BG_OKS : BG_BADS).map(src => `url('${src}')`).join(', ');
+      fb.style.backgroundImage = imgs;
+
+      fbMsg.textContent = message;
+      fb.classList.remove('ok','bad');
+      fb.classList.add(isOk ? 'ok' : 'bad');
+      screen.classList.add('is-hidden');
+      fb.classList.add('on');
+      playSound(isOk ? sOk : sBad);
+
+      const isLast = (i === deck.length - 1);
+
+      // Si NO es la última, pre-renderiza la siguiente pregunta detrás del overlay
+      if(!isLast){
+        setTimeout(()=>{ i++; render(); }, 50);
+      }
+
+      // Mantener overlay visible por FEEDBACK_MS y luego ocultarlo
+      setTimeout(()=>{
+        fb.classList.remove('on'); // inicia fade-out del overlay
+
+        setTimeout(()=>{
+          if(isLast){
+            // Última pregunta: ir al overlay final (no mostramos main)
+            showEnd();
+          }else{
+            // Mostrar el main con la nueva pregunta y animar entrada ahora visible
+            screen.classList.remove('is-hidden');
+            runEntrance();
+          }
+        }, FB_FADE_MS);
+
+      }, FEEDBACK_MS);
+    }
+
+    function showEnd(){
+      const win = score >= WIN_THRESHOLD;
+      endMsg.textContent = win ? ''
+                               : '';
+      endOverlay.classList.remove('win','lose');
+      endOverlay.classList.add(win ? 'win' : 'lose', 'on');
+      screen.classList.add('is-hidden');
+      // Redirigir tras END_MS
+      setTimeout(()=>{ window.location.href = REDIRECT_TO; }, END_MS);
+    }
+
+    function pickRandom(arr, n){
+      const copy = arr.slice();
+      for(let k=copy.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); [copy[k],copy[j]]=[copy[j],copy[k]]; }
+      return copy.slice(0, n);
+    }
+
+    function parseTimeVar(cssVar, fallback){
+      const v = getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+      if(!v) return fallback;
+      if(v.endsWith('ms')) return parseFloat(v);
+      if(v.endsWith('s'))  return parseFloat(v)*1000;
+      const n = parseFloat(v); return isNaN(n) ? fallback : n;
+    }
+
+    function escapeHtml(str){
+      return str.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+  })();
+  </script>
+</body>
+</html>
